@@ -77,23 +77,6 @@ jobs:
           token: ${{ secrets.PAT || github.token }}
           fetch-depth: 0
 
-      - name: Resolve reusable workflow source
-        id: workflow-source
-        shell: bash
-        run: |
-          set -euo pipefail
-          workflow_ref="${{ github.workflow_ref }}"
-          echo "repository=${workflow_ref%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"
-          echo "ref=${workflow_ref##*@}" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout workflow tools
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.workflow-source.outputs.repository }}
-          ref: ${{ steps.workflow-source.outputs.ref }}
-          token: ${{ secrets.PAT || github.token }}
-          path: .gh-tools
-
       - name: Resolve inputs once
         id: cfg
         shell: bash
@@ -118,10 +101,10 @@ jobs:
 
       - name: Build scan matrix
         id: matrix
-        uses: ./.gh-tools/.github/actions/ecosystem-matrix
+        uses: tsumrad/gh-tools/.github/actions/build-ecosystem-matrix@main
         with:
           mode: sbom
-          source_path: ${{ steps.cfg.outputs.source_path }}
+          path: ${{ steps.cfg.outputs.source_path }}
 
       - name: Summarize scan matrix
         shell: bash
@@ -153,25 +136,8 @@ jobs:
           token: ${{ secrets.PAT || github.token }}
           fetch-depth: 0
 
-      - name: Resolve reusable workflow source
-        id: workflow-source
-        shell: bash
-        run: |
-          set -euo pipefail
-          workflow_ref="${{ github.workflow_ref }}"
-          echo "repository=${workflow_ref%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"
-          echo "ref=${workflow_ref##*@}" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout workflow tools
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.workflow-source.outputs.repository }}
-          ref: ${{ steps.workflow-source.outputs.ref }}
-          token: ${{ secrets.PAT || github.token }}
-          path: .gh-tools
-
       - name: Run SBOM core action
-        uses: ./.gh-tools/.github/actions/sbom
+        uses: tsumrad/gh-tools/.github/actions/sbom@main
         with:
           source: ${{ matrix.source }}
           output_prefix: ${{ matrix.output_prefix }}

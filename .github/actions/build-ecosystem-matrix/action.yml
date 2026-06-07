@@ -1,11 +1,11 @@
-name: Ecosystem Matrix
+name: Build Ecosystem Matrix
 description: Build ecosystem scan matrix for audit and SBOM workflows.
 
 inputs:
   mode:
     description: Matrix mode to build.
     required: true
-  source_path:
+  path:
     description: Path to scan.
     required: false
     default: .
@@ -39,7 +39,7 @@ runs:
 
         result_json="$(bash "$GITHUB_ACTION_PATH/build-ecosystem-matrix.sh" \
           "${{ inputs.mode }}" \
-          "${{ inputs.source_path }}" \
+          "${{ inputs.path }}" \
           "${{ inputs.supported_ecosystems }}")"
         count="$(jq -r '.count' <<< "$result_json")"
         matrix_json="$(jq -c '.matrix' <<< "$result_json")"
