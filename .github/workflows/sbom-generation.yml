@@ -57,6 +57,8 @@ on:
 permissions:
   # Minimum required for checkout and source scanning.
   contents: read
+  # Required to upload Trivy SARIF results to code scanning.
+  security-events: write
 
 jobs:
   prepare-matrix:
@@ -143,6 +145,21 @@ jobs:
           output_prefix: ${{ matrix.output_prefix }}
           syft_version: ${{ needs.prepare-matrix.outputs.syft_version }}
           scan_label: ${{ matrix.scan_label }}
+
+      - name: Scan SBOM for vulnerabilities
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: sbom
+          scan-ref: ${{ matrix.output_prefix }}.cyclonedx.json
+          format: sarif
+          output: ${{ matrix.output_prefix }}.sarif
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+
+      - name: Upload vulnerability SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ matrix.output_prefix }}.sarif
+          category: trivy-${{ matrix.scan_label }}
 
       - name: Upload SBOM artifacts
         if: needs.prepare-matrix.outputs.upload_artifacts == 'true'
