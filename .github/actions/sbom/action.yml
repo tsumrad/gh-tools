@@ -1,24 +1,24 @@
-name: SBOM Core
-description: Core SBOM generation logic (Syft execution + generation + normalization)
+name: SBOM
+description: Generate and normalize a CycloneDX SBOM.
 
 inputs:
   source:
-    description: Syft source (for example dir:. or docker-archive:image.tar)
+    description: Syft source, for example dir:.
     required: true
   output_prefix:
-    description: Output file prefix without extension
+    description: Output file prefix without extension.
     required: true
   syft_version:
-    description: Pinned Syft version
+    description: Pinned Syft version.
     required: true
   scan_label:
-    description: Label used to create deterministic serial values per scan
+    description: Label used to create deterministic serial values per scan.
     required: true
 
 runs:
   using: composite
   steps:
-    - name: Install Syft (pinned)
+    - name: Install Syft
       uses: anchore/sbom-action/download-syft@v0
       with:
         syft-version: ${{ inputs.syft_version }}
@@ -36,20 +36,20 @@ runs:
         echo "created_at=$created_at" >> "$GITHUB_OUTPUT"
         echo "serial=$serial" >> "$GITHUB_OUTPUT"
 
-    - name: Generate SBOM (CycloneDX)
+    - name: Generate SBOM
       shell: bash
       env:
         SOURCE_DATE_EPOCH: ${{ steps.deterministic.outputs.source_date_epoch }}
       run: |
         set -euo pipefail
         mkdir -p "$(dirname "${{ inputs.output_prefix }}")"
-        bash .github/scripts/generate-sbom-cyclonedx.sh "${{ inputs.source }}" "${{ inputs.output_prefix }}"
+        bash "$GITHUB_ACTION_PATH/generate-sbom-cyclonedx.sh" "${{ inputs.source }}" "${{ inputs.output_prefix }}"
 
-    - name: Normalize SBOM output
+    - name: Normalize SBOM
       shell: bash
       run: |
         set -euo pipefail
-        bash .github/scripts/normalize-sbom.sh \
+        bash "$GITHUB_ACTION_PATH/normalize-sbom.sh" \
           "${{ inputs.output_prefix }}" \
           "${{ steps.deterministic.outputs.created_at }}" \
           "${{ steps.deterministic.outputs.serial }}"

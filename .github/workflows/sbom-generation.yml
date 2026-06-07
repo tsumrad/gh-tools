@@ -77,6 +77,23 @@ jobs:
           token: ${{ secrets.PAT || github.token }}
           fetch-depth: 0
 
+      - name: Resolve reusable workflow source
+        id: workflow-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow_ref="${{ github.workflow_ref }}"
+          echo "repository=${workflow_ref%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"
+          echo "ref=${workflow_ref##*@}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout workflow tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.workflow-source.outputs.repository }}
+          ref: ${{ steps.workflow-source.outputs.ref }}
+          token: ${{ secrets.PAT || github.token }}
+          path: .gh-tools
+
       - name: Resolve inputs once
         id: cfg
         shell: bash
@@ -101,21 +118,24 @@ jobs:
 
       - name: Build scan matrix
         id: matrix
+        uses: ./.gh-tools/.github/actions/ecosystem-matrix
+        with:
+          mode: sbom
+          source_path: ${{ steps.cfg.outputs.source_path }}
+
+      - name: Summarize scan matrix
         shell: bash
+        env:
+          DETECTED: ${{ steps.matrix.outputs.detected }}
+          TARGETS: ${{ steps.matrix.outputs.targets }}
         run: |
           set -euo pipefail
-
-          result_json="$(bash .github/scripts/build-ecosystem-matrix.sh sbom "${{ steps.cfg.outputs.source_path }}")"
-          count="$(jq -r '.count' <<< "$result_json")"
-          matrix_json="$(jq -c '.matrix' <<< "$result_json")"
-
-          echo "matrix_count=$count" >> "$GITHUB_OUTPUT"
-          echo "matrix=$matrix_json" >> "$GITHUB_OUTPUT"
-
           echo "### Scan Matrix" >> "$GITHUB_STEP_SUMMARY"
-          echo "Entries: $count" >> "$GITHUB_STEP_SUMMARY"
-          echo "Detected ecosystems: $(jq -r '.detected | join(", ")' <<< "$result_json")" >> "$GITHUB_STEP_SUMMARY"
-          echo "Selected targets: $(jq -r '.targets | join(", ")' <<< "$result_json")" >> "$GITHUB_STEP_SUMMARY"
+          echo "Entries: ${{ steps.matrix.outputs.matrix_count }}" >> "$GITHUB_STEP_SUMMARY"
+          detected_summary="$(jq -r 'join(", ")' <<< "$DETECTED")"
+          targets_summary="$(jq -r 'join(", ")' <<< "$TARGETS")"
+          echo "Detected ecosystems: $detected_summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "Selected targets: $targets_summary" >> "$GITHUB_STEP_SUMMARY"
 
   generate-sbom:
     name: Generate SBOM (${{ matrix.scan_label }})
@@ -133,8 +153,25 @@ jobs:
           token: ${{ secrets.PAT || github.token }}
           fetch-depth: 0
 
+      - name: Resolve reusable workflow source
+        id: workflow-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow_ref="${{ github.workflow_ref }}"
+          echo "repository=${workflow_ref%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"
+          echo "ref=${workflow_ref##*@}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout workflow tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.workflow-source.outputs.repository }}
+          ref: ${{ steps.workflow-source.outputs.ref }}
+          token: ${{ secrets.PAT || github.token }}
+          path: .gh-tools
+
       - name: Run SBOM core action
-        uses: ./.github/actions/sbom-core
+        uses: ./.gh-tools/.github/actions/sbom
         with:
           source: ${{ matrix.source }}
           output_prefix: ${{ matrix.output_prefix }}

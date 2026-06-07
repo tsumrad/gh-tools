@@ -19,8 +19,9 @@ set -euo pipefail
 MODE="${1:?mode is required (audit|sbom)}"
 SOURCE_PATH="${2:-.}"
 SUPPORTED_CSV="${3:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-ecosystem_json="$(bash .github/scripts/detect-ecosystems.sh "$SOURCE_PATH")"
+ecosystem_json="$(bash "$SCRIPT_DIR/detect-ecosystems.sh" "$SOURCE_PATH")"
 detected="$(jq -c '.list' <<< "$ecosystem_json")"
 
 build_supported_json() {
