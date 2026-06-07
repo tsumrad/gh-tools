@@ -147,7 +147,7 @@ jobs:
           scan_label: ${{ matrix.scan_label }}
 
       - name: Scan SBOM for vulnerabilities
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: sbom
           scan-ref: ${{ matrix.output_prefix }}.cyclonedx.json
