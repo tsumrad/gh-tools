@@ -55,8 +55,8 @@ on:
       artifact_retention_days: *artifact_retention_days_input
 
 permissions:
-  # Minimum required for checkout and source scanning.
-  contents: read
+  # Required for checkout/source scanning and dependency graph submission.
+  contents: write
   # Required to upload Trivy SARIF results to code scanning.
   security-events: write
 
@@ -152,6 +152,20 @@ jobs:
           set -euo pipefail
           ls -lah
           test -f "${{ matrix.output_prefix }}.cyclonedx.json"
+
+      - name: Submit transitive dependency snapshot
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.PAT || github.token }}
+        run: |
+          set -euo pipefail
+
+          SNAPSHOT_FILE="${{ matrix.output_prefix }}.github.json"
+          syft "${{ matrix.source }}" --output "github-json=$SNAPSHOT_FILE"
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/dependency-graph/snapshots" \
+            --input "$SNAPSHOT_FILE"
 
       - name: Scan SBOM for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
