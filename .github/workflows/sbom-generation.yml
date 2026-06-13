@@ -3,10 +3,6 @@ name: SBOM Generation Reusable
 on:
   # Reusable entrypoint for repository workflows.
   workflow_call:
-    secrets:
-      PAT:
-        description: Personal access token used for checkout when invoked as a reusable workflow
-        required: true
     inputs:
       # Scan target selection.
       source_path: &source_path_input
@@ -76,7 +72,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PAT || github.token }}
           fetch-depth: 0
 
       - name: Resolve inputs once
@@ -135,7 +130,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PAT || github.token }}
           fetch-depth: 0
 
       - name: Run SBOM core action
@@ -156,7 +150,7 @@ jobs:
       - name: Submit transitive dependency snapshot
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.PAT || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
