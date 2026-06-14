@@ -55,6 +55,8 @@ permissions:
   contents: write
   # Required to upload Trivy SARIF results to code scanning.
   security-events: write
+  # Required to raise or update the grouped findings PR.
+  pull-requests: write
 
 jobs:
   prepare-matrix:
@@ -201,3 +203,133 @@ jobs:
           path: ${{ matrix.output_prefix }}.cyclonedx.json
           if-no-files-found: error
           retention-days: ${{ needs.prepare-matrix.outputs.artifact_retention_days }}
+
+  group-findings-pr:
+    name: Group findings and raise PR
+    runs-on: ubuntu-latest
+    needs:
+      - prepare-matrix
+      - generate-sbom
+    if: needs.prepare-matrix.outputs.matrix_count != '0'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Trivy SARIF artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: trivy-results-*
+          path: trivy-results
+          merge-multiple: true
+
+      - name: Group vulnerability findings
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REPORT_FILE="security/trivy-findings.md"
+          mkdir -p "$(dirname "$REPORT_FILE")"
+
+          mapfile -t sarif_files < <(find trivy-results -type f -name '*.sarif' | sort)
+
+          {
+            echo "# Trivy SBOM Findings"
+            echo
+            echo "Generated from SBOM vulnerability scans for workflow run ${GITHUB_RUN_ID}."
+            echo
+          } > "$REPORT_FILE"
+
+          if [ "${#sarif_files[@]}" -eq 0 ]; then
+            echo "No SARIF files were found." >> "$REPORT_FILE"
+            exit 0
+          fi
+
+          jq -s -r '
+            def severity($rules; $ruleId):
+              (($rules[$ruleId].properties."security-severity" // "0") | tonumber) as $score
+              | if $score >= 9 then "CRITICAL"
+                elif $score >= 7 then "HIGH"
+                elif $score >= 4 then "MEDIUM"
+                elif $score > 0 then "LOW"
+                else "UNKNOWN"
+                end;
+
+            [
+              .[] as $doc
+              | ($doc.runs[]? | {rules: ((.tool.driver.rules // []) | map({key: .id, value: .}) | from_entries), results: (.results // [])}) as $run
+              | $run.results[]?
+              | {
+                  ruleId: (.ruleId // "unknown"),
+                  severity: severity($run.rules; .ruleId),
+                  package: (.locations[0].physicalLocation.artifactLocation.uri // "unknown"),
+                  message: (.message.text // "No details provided.")
+                }
+            ]
+            | group_by(.severity)
+            | sort_by(
+                (.[0].severity | {
+                  "CRITICAL": 0,
+                  "HIGH": 1,
+                  "MEDIUM": 2,
+                  "LOW": 3,
+                  "UNKNOWN": 4
+                }[.] // 5)
+              )
+            | if length == 0 then
+                "No vulnerability findings were reported."
+              else
+                map(
+                  "## " + .[0].severity + " (" + (length | tostring) + ")\n\n"
+                  + (
+                    group_by(.ruleId)
+                    | sort_by(.[0].ruleId)
+                    | map(
+                        "### " + .[0].ruleId + " (" + (length | tostring) + ")\n\n"
+                        + (
+                          map("- `" + .package + "` - " + (.message | gsub("\n"; " ")))
+                          | unique
+                          | join("\n")
+                        )
+                      )
+                    | join("\n\n")
+                  )
+                )
+                | join("\n\n")
+              end
+          ' "${sarif_files[@]}" >> "$REPORT_FILE"
+
+      - name: Raise grouped findings PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BRANCH: automation/grouped-trivy-findings
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- security/trivy-findings.md; then
+            echo "No grouped findings changes to publish."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$PR_BRANCH"
+          git add security/trivy-findings.md
+          git commit -m "Group Trivy SBOM findings"
+          git push --force-with-lease origin "$PR_BRANCH"
+
+          existing_pr="$(gh pr list --head "$PR_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing_pr" ]; then
+            gh pr edit "$existing_pr" \
+              --title "Group Trivy SBOM findings" \
+              --body "Updates the grouped Trivy SBOM findings report from workflow run ${GITHUB_RUN_ID}."
+          else
+            gh pr create \
+              --base "${GITHUB_REF_NAME}" \
+              --head "$PR_BRANCH" \
+              --title "Group Trivy SBOM findings" \
+              --body "Adds or updates the grouped Trivy SBOM findings report from workflow run ${GITHUB_RUN_ID}."
+          fi
