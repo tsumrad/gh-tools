@@ -6,6 +6,7 @@ set -euo pipefail
 
 PROJECT_DIR="${1:?project directory is required}"
 OUTPUT_PREFIX="${2:?output prefix is required}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CYCLONEDX_BOM_VERSION="${CYCLONEDX_BOM_VERSION:-7.3.0}"
 POETRY_VERSION="${POETRY_VERSION:-2.2.1}"
@@ -132,6 +133,8 @@ log "Generating SPDX SBOM for dependency graph submission"
 
 syft "dir:." \
   --output "spdx-json=$SPDX_FILE"
+
+"$TOOL_PYTHON" "$SCRIPT_DIR/enrich-python-spdx-dependencies.py" "$PROJECT_DIR" "$SPDX_FILE"
 
 popd >/dev/null
 
