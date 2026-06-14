@@ -20,7 +20,7 @@ on:
       syft_version: &syft_version_input
         description: Pinned Syft version for deterministic behavior
         required: false
-        default: v1.20.0
+        default: v1.45.0
         type: string
 
       # Artifact publishing.
@@ -51,8 +51,8 @@ on:
       artifact_retention_days: *artifact_retention_days_input
 
 permissions:
-  # Required for checkout/source scanning and dependency graph submission.
-  contents: write
+  # Minimum required for checkout and source scanning.
+  contents: read
   # Required to upload Trivy SARIF results to code scanning.
   security-events: write
 
@@ -98,7 +98,7 @@ jobs:
 
       - name: Build scan matrix
         id: matrix
-        uses: tsumrad/gh-tools/.github/actions/build-ecosystem-matrix@main
+        uses: sumathi-thirumani/shared-gha-tools/.github/actions/build-ecosystem-matrix@feature/sbom-scanner
         with:
           mode: sbom
           path: ${{ steps.cfg.outputs.source_path }}
@@ -133,7 +133,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run SBOM core action
-        uses: tsumrad/gh-tools/.github/actions/sbom@main
+        uses: sumathi-thirumani/shared-gha-tools/.github/actions/sbom@feature/sbom-scanner
         with:
           source: ${{ matrix.source }}
           output_prefix: ${{ matrix.output_prefix }}
