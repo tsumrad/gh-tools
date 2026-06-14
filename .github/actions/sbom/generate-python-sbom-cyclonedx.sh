@@ -134,8 +134,6 @@ log "Generating SPDX SBOM for dependency graph submission"
 syft "dir:." \
   --output "spdx-json=$SPDX_FILE"
 
-"$TOOL_PYTHON" "$SCRIPT_DIR/enrich-python-spdx-dependencies.py" "$PROJECT_DIR" "$SPDX_FILE"
-
 popd >/dev/null
 
 verify_sbom "$OUTPUT_FILE" "$TOOL_PYTHON"

@@ -146,12 +146,11 @@ jobs:
           set -euo pipefail
           ls -lah
           test -f "${{ matrix.output_prefix }}.cyclonedx.json"
-          test -f "${{ matrix.output_prefix }}.spdx.json"
 
-      #- name: Submit SBOM to GitHub Dependency Graph
-      #  uses: advanced-security/spdx-dependency-submission-action@v0.2.0
-      #  with:
-      #    filePath: ${{ matrix.output_prefix }}.spdx.json
+      - name: Submit SBOM to GitHub Dependency Graph
+        uses: advanced-security/spdx-dependency-submission-action@v0.2.0
+        with:
+          filePath: ${{ matrix.output_prefix }}.spdx.json
 
       - name: Scan SBOM for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
