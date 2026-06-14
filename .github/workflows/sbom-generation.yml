@@ -218,54 +218,54 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download Trivy SARIF artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: trivy-results-*
-          path: trivy-results
-          merge-multiple: true
-
-      - name: Group vulnerability findings
+      - name: Group SBOM code scanning findings
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
           REPORT_FILE="security/trivy-findings.md"
+          ALERTS_FILE="$(mktemp)"
           mkdir -p "$(dirname "$REPORT_FILE")"
 
-          mapfile -t sarif_files < <(find trivy-results -type f -name '*.sarif' | sort)
+          gh api \
+            --paginate \
+            "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100" \
+            > "$ALERTS_FILE"
 
           {
             echo "# Trivy SBOM Findings"
             echo
-            echo "Generated from SBOM vulnerability scans for workflow run ${GITHUB_RUN_ID}."
+            echo "Generated from open GitHub Code Scanning findings uploaded by SBOM vulnerability scans."
             echo
           } > "$REPORT_FILE"
 
-          if [ "${#sarif_files[@]}" -eq 0 ]; then
-            echo "No SARIF files were found." >> "$REPORT_FILE"
-            exit 0
-          fi
-
-          jq -s -r '
-            def severity($rules; $ruleId):
-              (($rules[$ruleId].properties."security-severity" // "0") | tonumber) as $score
-              | if $score >= 9 then "CRITICAL"
-                elif $score >= 7 then "HIGH"
-                elif $score >= 4 then "MEDIUM"
-                elif $score > 0 then "LOW"
-                else "UNKNOWN"
+          jq -r '
+            def normalize_severity:
+              ascii_upcase
+              | if . == "ERROR" then "HIGH"
+                elif . == "WARNING" then "MEDIUM"
+                elif . == "NOTE" then "LOW"
+                elif . == "NONE" then "UNKNOWN"
+                else .
                 end;
 
             [
-              .[] as $doc
-              | ($doc.runs[]? | {rules: ((.tool.driver.rules // []) | map({key: .id, value: .}) | from_entries), results: (.results // [])}) as $run
-              | $run.results[]?
+              .[]
+              | select((.tool.name // "" | ascii_downcase) | contains("trivy"))
+              | select((.most_recent_instance.category // "") | startswith("trivy-"))
               | {
-                  ruleId: (.ruleId // "unknown"),
-                  severity: severity($run.rules; .ruleId),
-                  package: (.locations[0].physicalLocation.artifactLocation.uri // "unknown"),
-                  message: (.message.text // "No details provided.")
+                  ruleId: (.rule.id // "unknown"),
+                  severity: ((.rule.security_severity_level // .rule.severity // "unknown") | normalize_severity),
+                  category: (.most_recent_instance.category // "unknown"),
+                  location: (
+                    ((.most_recent_instance.location.path // "unknown")
+                    + ":"
+                    + ((.most_recent_instance.location.start_line // 1) | tostring))
+                  ),
+                  message: (.rule.description // .rule.name // "No details provided."),
+                  url: (.html_url // "")
                 }
             ]
             | group_by(.severity)
@@ -289,7 +289,7 @@ jobs:
                     | map(
                         "### " + .[0].ruleId + " (" + (length | tostring) + ")\n\n"
                         + (
-                          map("- `" + .package + "` - " + (.message | gsub("\n"; " ")))
+                          map("- `" + .category + "` `" + .location + "` - " + (.message | gsub("\n"; " ")) + (if .url != "" then " ([alert](" + .url + "))" else "" end))
                           | unique
                           | join("\n")
                         )
@@ -299,7 +299,7 @@ jobs:
                 )
                 | join("\n\n")
               end
-          ' "${sarif_files[@]}" >> "$REPORT_FILE"
+          ' "$ALERTS_FILE" >> "$REPORT_FILE"
 
       - name: Raise grouped findings PR
         shell: bash
@@ -309,7 +309,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if git diff --quiet -- security/trivy-findings.md; then
+          if [ -z "$(git status --porcelain -- security/trivy-findings.md)" ]; then
             echo "No grouped findings changes to publish."
             exit 0
           fi
