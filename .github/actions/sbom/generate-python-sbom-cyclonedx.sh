@@ -87,9 +87,20 @@ if is_poetry_project; then
 
   ensure_poetry_lock
 
-  log "Generating SBOM from Poetry metadata"
+  PROJECT_VENV="$(mktemp -d)"
 
-  "$TOOL_PYTHON" -m cyclonedx_py poetry \
+  log "Installing Poetry dependencies"
+
+  export POETRY_VIRTUALENVS_CREATE=true
+  export POETRY_VIRTUALENVS_PATH="$PROJECT_VENV"
+  "$TOOL_POETRY" install --no-interaction --no-root
+
+  PROJECT_PYTHON="$("$TOOL_POETRY" env info --executable)"
+
+  log "Generating SBOM from installed Poetry environment"
+
+  "$TOOL_PYTHON" -m cyclonedx_py environment \
+    "$PROJECT_PYTHON" \
     --output-format JSON \
     --output-file "$OUTPUT_FILE"
 
