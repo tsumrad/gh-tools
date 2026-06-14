@@ -52,7 +52,7 @@ on:
 
 permissions:
   # Minimum required for checkout and source scanning.
-  contents: read
+  contents: write
   # Required to upload Trivy SARIF results to code scanning.
   security-events: write
 
