@@ -7,6 +7,7 @@ set -euo pipefail
 #   generate-sbom-cyclonedx.sh "dir:." "sbom/filesystem"
 # Produces:
 #   sbom/filesystem.cyclonedx.json
+#   sbom/filesystem.spdx.json
 
 SOURCE="${1:?source is required}"
 OUTPUT_PREFIX="${2:?output prefix is required}"
@@ -31,5 +32,6 @@ if project_dir="$(source_directory)" && has_python_dependency_manifest "$project
   bash "$SCRIPT_DIR/generate-python-sbom-cyclonedx.sh" "$project_dir" "$OUTPUT_PREFIX"
 else
   syft "${SOURCE}" \
-    --output "cyclonedx-json=${OUTPUT_PREFIX}.cyclonedx.json"
+    --output "cyclonedx-json=${OUTPUT_PREFIX}.cyclonedx.json" \
+    --output "spdx-json=${OUTPUT_PREFIX}.spdx.json"
 fi

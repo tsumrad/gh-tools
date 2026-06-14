@@ -59,6 +59,7 @@ PY
 mkdir -p "$(dirname "$OUTPUT_PREFIX")"
 
 OUTPUT_FILE="$(cd "$(dirname "$OUTPUT_PREFIX")" && pwd)/$(basename "$OUTPUT_PREFIX").cyclonedx.json"
+SPDX_FILE="$(cd "$(dirname "$OUTPUT_PREFIX")" && pwd)/$(basename "$OUTPUT_PREFIX").spdx.json"
 
 TOOL_VENV="$(mktemp -d)"
 PROJECT_VENV=""
@@ -126,6 +127,11 @@ elif [ -f "requirements.txt" ]; then
 else
   die "No supported dependency manifest found (poetry.lock, pyproject.toml, or requirements.txt)"
 fi
+
+log "Generating SPDX SBOM for dependency graph submission"
+
+syft "dir:." \
+  --output "spdx-json=$SPDX_FILE"
 
 popd >/dev/null
 
