@@ -339,15 +339,26 @@ jobs:
           git commit -m "Group Trivy SBOM findings"
           git push --force-with-lease origin "$PR_BRANCH"
 
+          pr_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${PR_BRANCH}?quick_pull=1"
           existing_pr="$(gh pr list --head "$PR_BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [ -n "$existing_pr" ]; then
             gh pr edit "$existing_pr" \
               --title "Group Trivy SBOM findings" \
-              --body "Updates the grouped Trivy SBOM findings report from workflow run ${GITHUB_RUN_ID}."
+              --body "Updates the grouped Trivy SBOM findings report from workflow run ${GITHUB_RUN_ID}." ||
+              echo "Unable to update PR. Open manually: $pr_url"
           else
-            gh pr create \
+            if ! gh pr create \
               --base "${GITHUB_REF_NAME}" \
               --head "$PR_BRANCH" \
               --title "Group Trivy SBOM findings" \
-              --body "Adds or updates the grouped Trivy SBOM findings report from workflow run ${GITHUB_RUN_ID}."
+              --body "Adds or updates the grouped Trivy SBOM findings report from workflow run ${GITHUB_RUN_ID}."; then
+              {
+                echo "### Grouped findings PR"
+                echo
+                echo "The grouped findings branch was pushed, but GitHub Actions is not permitted to create pull requests in this repository."
+                echo
+                echo "Open the PR manually: $pr_url"
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "GitHub Actions is not permitted to create pull requests. Open manually: $pr_url"
+            fi
           fi
