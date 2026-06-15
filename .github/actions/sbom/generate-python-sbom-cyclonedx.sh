@@ -143,6 +143,7 @@ import json
 import re
 import sys
 import tomllib
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -219,6 +220,7 @@ snapshot = {
     "version": 0,
     "sha": "",
     "ref": "",
+    "scanned": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     "job": {
         "id": "",
         "correlator": "",

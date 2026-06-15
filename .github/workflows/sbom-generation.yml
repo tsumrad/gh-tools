@@ -167,9 +167,10 @@ jobs:
           jq \
             --arg ref "$GITHUB_REF" \
             --arg sha "$GITHUB_SHA" \
+            --arg scanned "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
             --arg job_id "$GITHUB_JOB" \
             --arg correlator "sbom-${{ matrix.scan_label }}" \
-            '.ref = $ref | .sha = $sha | .job.id = $job_id | .job.correlator = $correlator' \
+            '.ref = $ref | .sha = $sha | .scanned = (.scanned // $scanned) | .job.id = $job_id | .job.correlator = $correlator' \
             "$SNAPSHOT_FILE" > "$NORMALIZED_SNAPSHOT_FILE"
 
           gh api \
