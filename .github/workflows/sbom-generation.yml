@@ -151,10 +151,28 @@ jobs:
           test -f "${{ matrix.output_prefix }}.spdx.json"
 
       - name: Force refresh GitHub Dependency Graph
-        uses: advanced-security/spdx-dependency-submission-action@v0.2.0
-        with:
-          filePath: ${{ matrix.output_prefix }}.spdx.json
-          correlator: sbom-${{ matrix.scan_label }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          SNAPSHOT_FILE="${{ matrix.output_prefix }}.github.json"
+          NORMALIZED_SNAPSHOT_FILE="${{ matrix.output_prefix }}.github.normalized.json"
+
+          syft "${{ matrix.source }}" --output "github-json=$SNAPSHOT_FILE"
+          jq \
+            --arg ref "$GITHUB_REF" \
+            --arg sha "$GITHUB_SHA" \
+            --arg job_id "$GITHUB_JOB" \
+            --arg correlator "sbom-${{ matrix.scan_label }}" \
+            '.ref = $ref | .sha = $sha | .job.id = $job_id | .job.correlator = $correlator' \
+            "$SNAPSHOT_FILE" > "$NORMALIZED_SNAPSHOT_FILE"
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/dependency-graph/snapshots" \
+            --input "$NORMALIZED_SNAPSHOT_FILE"
 
       - name: Scan SBOM for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
