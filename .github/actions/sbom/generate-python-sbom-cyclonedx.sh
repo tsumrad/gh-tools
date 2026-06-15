@@ -61,6 +61,7 @@ mkdir -p "$(dirname "$OUTPUT_PREFIX")"
 
 OUTPUT_FILE="$(cd "$(dirname "$OUTPUT_PREFIX")" && pwd)/$(basename "$OUTPUT_PREFIX").cyclonedx.json"
 SPDX_FILE="$(cd "$(dirname "$OUTPUT_PREFIX")" && pwd)/$(basename "$OUTPUT_PREFIX").spdx.json"
+GITHUB_FILE="$(cd "$(dirname "$OUTPUT_PREFIX")" && pwd)/$(basename "$OUTPUT_PREFIX").github.json"
 
 TOOL_VENV="$(mktemp -d)"
 PROJECT_VENV=""
@@ -133,6 +134,113 @@ log "Generating SPDX SBOM for dependency graph submission"
 
 syft "dir:." \
   --output "spdx-json=$SPDX_FILE"
+
+log "Generating GitHub dependency snapshot from installed environment"
+
+"$PROJECT_PYTHON" - "$PROJECT_DIR" "$GITHUB_FILE" <<'PY'
+import importlib.metadata
+import json
+import re
+import sys
+import tomllib
+from pathlib import Path
+from urllib.parse import quote
+
+
+def normalize_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def requirement_name(requirement: str) -> str | None:
+    value = requirement.strip()
+    if not value or value.startswith("#") or value.startswith(("-r ", "--requirement ")):
+        return None
+    if value.startswith(("-e ", "--editable ")):
+        value = value.split(maxsplit=1)[1]
+    if value.startswith((".", "/", "git+", "http://", "https://")):
+        return None
+    match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9_.-]*)", value)
+    return normalize_name(match.group(1)) if match else None
+
+
+def direct_dependencies(project_dir: Path) -> set[str]:
+    dependencies: set[str] = set()
+
+    requirements = project_dir / "requirements.txt"
+    if requirements.is_file():
+        for line in requirements.read_text(encoding="utf-8").splitlines():
+            name = requirement_name(line)
+            if name:
+                dependencies.add(name)
+
+    pyproject = project_dir / "pyproject.toml"
+    if pyproject.is_file():
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        project = data.get("project") or {}
+        for requirement in project.get("dependencies") or []:
+            name = requirement_name(requirement)
+            if name:
+                dependencies.add(name)
+
+        poetry_dependencies = (
+            ((data.get("tool") or {}).get("poetry") or {}).get("dependencies") or {}
+        )
+        for name in poetry_dependencies:
+            normalized = normalize_name(name)
+            if normalized != "python":
+                dependencies.add(normalized)
+
+    return dependencies
+
+
+def purl(name: str, version: str) -> str:
+    return f"pkg:pypi/{quote(normalize_name(name))}@{quote(version)}"
+
+
+project_dir = Path(sys.argv[1]).resolve()
+output_file = Path(sys.argv[2]).resolve()
+direct = direct_dependencies(project_dir)
+resolved = {}
+
+for distribution in importlib.metadata.distributions():
+    name = distribution.metadata.get("Name")
+    version = distribution.version
+    if not name or not version:
+        continue
+
+    normalized = normalize_name(name)
+    resolved[normalized] = {
+        "package_url": purl(name, version),
+        "relationship": "direct" if normalized in direct else "indirect",
+        "scope": "runtime",
+    }
+
+snapshot = {
+    "version": 0,
+    "sha": "",
+    "ref": "",
+    "job": {
+        "id": "",
+        "correlator": "",
+    },
+    "detector": {
+        "name": "python-installed-environment",
+        "version": "1",
+        "url": "https://github.com/tsumrad/gh-tools",
+    },
+    "manifests": {
+        str(project_dir): {
+            "name": project_dir.name or "python-project",
+            "file": {
+                "source_location": str(project_dir),
+            },
+            "resolved": dict(sorted(resolved.items())),
+        }
+    },
+}
+
+output_file.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
 
 popd >/dev/null
 

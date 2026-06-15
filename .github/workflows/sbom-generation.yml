@@ -160,7 +160,10 @@ jobs:
           SNAPSHOT_FILE="${{ matrix.output_prefix }}.github.json"
           NORMALIZED_SNAPSHOT_FILE="${{ matrix.output_prefix }}.github.normalized.json"
 
-          syft "${{ matrix.source }}" --output "github-json=$SNAPSHOT_FILE"
+          if [ ! -f "$SNAPSHOT_FILE" ]; then
+            syft "${{ matrix.source }}" --output "github-json=$SNAPSHOT_FILE"
+          fi
+
           jq \
             --arg ref "$GITHUB_REF" \
             --arg sha "$GITHUB_SHA" \
