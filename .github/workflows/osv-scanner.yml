@@ -15,27 +15,6 @@ permissions:
 
 jobs:
   scan:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Run OSV Scanner
-        uses: google/osv-scanner-action/osv-scanner-action@v1.7.1
-        with:
-          scan-args: ${{ inputs.scan-args }}
-
-      - name: Check SARIF exists
-        if: always()
-        id: sarif
-        run: |
-          if [ -f osv-scanner-results.sarif ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Upload OSV Scanner results
-        if: always() && steps.sarif.outputs.exists == 'true'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: osv-scanner-results.sarif
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@1f1242919d8a60496dd1874b24b62b2370ed4c78
+    with:
+      scan-args: ${{ inputs.scan-args }}
